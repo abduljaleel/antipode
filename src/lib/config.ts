@@ -1,12 +1,12 @@
 export const appConfig = {
-  name: "Robocars",
-  description: "Algorithms to live by. Intelligence for autonomous fleets.",
-  url: "https://robocars.co.nz",
+  name: "Antipode",
+  description: "Hot-reloading for physical engineering.",
+  url: "https://antipode.co.nz",
   navItems: [
     { title: "Dashboard", href: "/dashboard", icon: "dashboard" },
-    { title: "Fleet", href: "/fleet", icon: "car" },
-    { title: "Missions", href: "/missions", icon: "play" },
-    { title: "Console", href: "/console", icon: "radio" },
+    { title: "Twins", href: "/twins", icon: "car" },
+    { title: "Sensors", href: "/sensors", icon: "radio" },
+    { title: "Predictions", href: "/predictions", icon: "play" },
     { title: "Analytics", href: "/analytics", icon: "chart" },
   ],
 };
