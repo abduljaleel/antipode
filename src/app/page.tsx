@@ -1,577 +1,403 @@
 import Link from "next/link";
 import { appConfig } from "@/lib/config";
 
-const ACCENT = "#40c8d0";
+/* ────────────────────────────────────────────────────────────────────────
+   ANTIPODE — THE MIRROR
+   The whole page is built around a single vertical seam down the center.
+   LEFT half  = PHYSICAL  (warm copper, grainy, real)
+   RIGHT half = DIGITAL TWIN (cool cyan wireframe, glowing, live readouts)
+   Components on the left mirror their twins on the right; sync lines cross
+   the seam. The doubling/reflection IS the visual thesis.
+   ──────────────────────────────────────────────────────────────────────── */
 
-const sensors = [
-  { label: "VRM-1 voltage", value: "12.04 V", tone: "ok" },
-  { label: "VRM-2 voltage", value: "12.01 V", tone: "ok" },
-  { label: "VRM-3 voltage", value: "11.78 V", tone: "warn" },
-  { label: "Core temp", value: "62.4 °C", tone: "ok" },
-  { label: "VRM-3 temp", value: "84.2 °C", tone: "warn" },
-  { label: "Rail-2 current", value: "4.18 A", tone: "warn" },
-  { label: "Clock skew", value: "+1.2 ppm", tone: "ok" },
-  { label: "I2C latency", value: "0.84 ms", tone: "ok" },
+const ACCENT = "#40c8d0";          // cyan — the digital plane
+const COPPER = "#d08a40";          // copper — the physical plane
+const COPPER_DIM = "#7a5a30";
+const INK = "#06070b";
+const SEAM = "#40c8d0";
+
+const MONO = "var(--font-geist-mono), 'SF Mono', ui-monospace, Menlo, monospace";
+const SANS = "var(--font-sans), ui-sans-serif, system-ui, -apple-system, sans-serif";
+
+/* matched component pairs — physical node ↔ its live twin reading.
+   `y` is the shared vertical coordinate (the "same coordinate" motif). */
+const PAIRS = [
+  { id: "VRM-1", phys: "voltage reg · rail 1", twin: "rail 1: 12.04 V", y: 70, warn: false },
+  { id: "VRM-2", phys: "voltage reg · rail 2", twin: "rail 2: 12.01 V", y: 132, warn: false },
+  { id: "VRM-3", phys: "voltage reg · rail 3", twin: "VRM-3 temp: 84°C ▲", y: 196, warn: true },
+  { id: "MCU", phys: "mcu · core", twin: "core: 62.4°C · ok", y: 258, warn: false },
+  { id: "I-2", phys: "shunt · rail 2", twin: "current: 2.1 A ▲", y: 320, warn: true },
 ];
 
-const toneColor: Record<string, string> = {
-  ok: "#7adfa0",
-  warn: "#f0b070",
-  alert: "#ef6b85",
-};
+/* ── PHYSICAL board: warm copper PCB, drawn "real" ───────────────────── */
+function PhysicalBoard() {
+  return (
+    <svg viewBox="0 0 300 360" className="w-full max-w-[360px]" aria-hidden>
+      <defs>
+        <linearGradient id="sub" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#1a1206" />
+          <stop offset="1" stopColor="#0e0a04" />
+        </linearGradient>
+        <filter id="grain">
+          <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" result="n" />
+          <feColorMatrix in="n" type="saturate" values="0" />
+          <feComponentTransfer>
+            <feFuncA type="linear" slope="0.06" />
+          </feComponentTransfer>
+          <feComposite operator="over" in2="SourceGraphic" />
+        </filter>
+      </defs>
+
+      <g filter="url(#grain)">
+        <rect x="14" y="14" width="272" height="332" rx="8" fill="url(#sub)" stroke={COPPER_DIM} strokeWidth="1" />
+
+        {/* mounting holes */}
+        {[[28, 28], [272, 28], [28, 332], [272, 332]].map(([cx, cy], i) => (
+          <circle key={i} cx={cx} cy={cy} r="5" fill={INK} stroke={COPPER_DIM} strokeWidth="1.2" />
+        ))}
+
+        {/* copper traces — horizontal runs to each component row */}
+        {PAIRS.map((p) => (
+          <line key={p.id} x1="60" y1={p.y} x2="278" y2={p.y} stroke={COPPER} strokeWidth="1" opacity="0.5" />
+        ))}
+        {[90, 150, 210].map((x) => (
+          <line key={x} x1={x} y1="40" x2={x} y2="320" stroke={COPPER} strokeWidth="0.6" opacity="0.28" />
+        ))}
+
+        {/* header pins on the inner (seam-facing) edge */}
+        {Array.from({ length: 9 }).map((_, i) => (
+          <rect key={i} x="276" y={56 + i * 28} width="12" height="6" rx="1" fill="#e3b35a" />
+        ))}
+
+        {/* components, each anchored on its shared y-coordinate */}
+        {PAIRS.map((p) => {
+          const c = p.warn ? "#e0903a" : COPPER;
+          if (p.id === "MCU") {
+            return (
+              <g key={p.id}>
+                <rect x="96" y={p.y - 22} width="84" height="44" rx="3" fill="#15100a" stroke="#4a3a20" strokeWidth="1" />
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <rect key={i} x={100 + i * 13} y={p.y + 22} width="4" height="8" fill="#7a5a30" />
+                ))}
+                <text x="138" y={p.y + 4} textAnchor="middle" fontSize="10" fontFamily="monospace" fill="#a07a40">MCU</text>
+              </g>
+            );
+          }
+          return (
+            <g key={p.id}>
+              <rect x="78" y={p.y - 13} width="48" height="26" rx="2" fill="#15100a" stroke={c} strokeWidth="1" />
+              <circle cx="70" cy={p.y} r="3" fill={c} opacity="0.9" />
+              <text x="102" y={p.y + 4} textAnchor="middle" fontSize="8.5" fontFamily="monospace" fill={c}>{p.id}</text>
+            </g>
+          );
+        })}
+
+        {/* electrolytic caps */}
+        {[[150, 56], [196, 56], [150, 300]].map(([cx, cy], i) => (
+          <circle key={i} cx={cx} cy={cy} r="9" fill="#241a0c" stroke="#5a4424" strokeWidth="1.5" />
+        ))}
+      </g>
+    </svg>
+  );
+}
+
+/* ── DIGITAL twin: same board, cyan wireframe + live readouts ────────── */
+function DigitalTwin() {
+  return (
+    <svg viewBox="0 0 300 360" className="w-full max-w-[360px]" aria-hidden>
+      <defs>
+        <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+          <feGaussianBlur stdDeviation="2.2" result="b" />
+          <feMerge>
+            <feMergeNode in="b" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+
+      {/* substrate outline — wireframe, no fill */}
+      <rect x="14" y="14" width="272" height="332" rx="8" fill="none" stroke={ACCENT} strokeWidth="1" opacity="0.6" filter="url(#glow)" />
+      <rect x="14" y="14" width="272" height="332" rx="8" fill={ACCENT} opacity="0.03" />
+
+      {[[28, 28], [272, 28], [28, 332], [272, 332]].map(([cx, cy], i) => (
+        <circle key={i} cx={cx} cy={cy} r="5" fill="none" stroke={ACCENT} strokeWidth="1" opacity="0.5" />
+      ))}
+
+      {/* wireframe traces */}
+      {PAIRS.map((p) => (
+        <line key={p.id} x1="22" y1={p.y} x2="222" y2={p.y} stroke={ACCENT} strokeWidth="0.8" opacity="0.35" />
+      ))}
+
+      {/* header pins on the inner (seam-facing) edge — mirrored to the LEFT */}
+      {Array.from({ length: 9 }).map((_, i) => (
+        <rect key={i} x="12" y={56 + i * 28} width="12" height="6" rx="1" fill="none" stroke={ACCENT} strokeWidth="0.9" opacity="0.7" />
+      ))}
+
+      {/* twin components + live readouts */}
+      {PAIRS.map((p) => {
+        const stroke = p.warn ? "#f0b070" : ACCENT;
+        if (p.id === "MCU") {
+          return (
+            <g key={p.id} filter="url(#glow)">
+              <rect x="120" y={p.y - 22} width="84" height="44" rx="3" fill="none" stroke={ACCENT} strokeWidth="1" opacity="0.8" />
+            </g>
+          );
+        }
+        return (
+          <g key={p.id}>
+            <rect x="174" y={p.y - 13} width="48" height="26" rx="2" fill="none" stroke={stroke} strokeWidth="1" opacity="0.85" filter="url(#glow)" />
+            <circle cx="230" cy={p.y} r="3" fill={stroke} opacity="0.9" />
+          </g>
+        );
+      })}
+
+      {/* LIVE READOUTS overlaid, right of each twin component */}
+      {PAIRS.map((p) => (
+        <text
+          key={p.id}
+          x="124"
+          y={p.id === "MCU" ? p.y + 4 : p.y - 18}
+          fontSize="9"
+          fontFamily="monospace"
+          fill={p.warn ? "#f0b070" : ACCENT}
+          opacity="0.95"
+        >
+          {p.twin}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
+/* small globe with the antipodal line Europe → Auckland */
+function AntipodeGlobe() {
+  return (
+    <svg viewBox="0 0 120 120" className="h-28 w-28" aria-hidden>
+      <circle cx="60" cy="60" r="46" fill="none" stroke="#2a2f38" strokeWidth="1" />
+      {[18, 30, 42].map((r) => (
+        <ellipse key={r} cx="60" cy="60" rx={r} ry="46" fill="none" stroke="#222831" strokeWidth="0.6" />
+      ))}
+      {[60, 38, 82].map((cy) => (
+        <line key={cy} x1="14" y1={cy} x2="106" y2={cy} stroke="#222831" strokeWidth="0.6" />
+      ))}
+      {/* Europe node (warm) → Auckland node (cyan), through the core */}
+      <line x1="44" y1="40" x2="78" y2="84" stroke={ACCENT} strokeWidth="1" strokeDasharray="2 3" opacity="0.8" />
+      <circle cx="44" cy="40" r="3.4" fill={COPPER} />
+      <circle cx="78" cy="84" r="3.4" fill={ACCENT} />
+      <text x="44" y="30" textAnchor="middle" fontSize="6.5" fontFamily="monospace" fill={COPPER}>EUROPE</text>
+      <text x="78" y="100" textAnchor="middle" fontSize="6.5" fontFamily="monospace" fill={ACCENT}>AUCKLAND</text>
+    </svg>
+  );
+}
 
 export default function LandingPage() {
   return (
-    <div
-      className="flex min-h-screen flex-col bg-[#08090d] text-[#d4d4d8]"
-      style={{ fontFamily: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif" }}
-    >
-      {/* ──────────────────────────────────────────────────────────────
-          NAV
-      ────────────────────────────────────────────────────────────── */}
-      <header className="border-b border-[#16181d]">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
-          <div className="flex items-center gap-3">
-            <div
-              className="h-2 w-2 rounded-full animate-pulse"
-              style={{ backgroundColor: ACCENT, boxShadow: `0 0 8px ${ACCENT}` }}
-            />
-            <span
-              className="text-base tracking-wide text-[#fafafa]"
-              style={{ fontFamily: "'Cormorant Garamond', 'Iowan Old Style', Georgia, serif", fontWeight: 600 }}
-            >
-              Antipode
-            </span>
-            <span
-              className="text-[10px] uppercase tracking-[0.25em] text-[#52525b] hidden sm:inline"
-              style={{ fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-            >
-              · Auckland
-            </span>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link
-              href="/login"
-              className="text-xs text-[#71717a] hover:text-[#fafafa] transition-colors"
-              style={{ fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-            >
-              sign in
-            </Link>
-            <Link
-              href="/signup"
-              className="text-xs border px-4 py-1.5 transition-colors"
-              style={{
-                fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace",
-                borderColor: `${ACCENT}66`,
-                color: ACCENT,
-              }}
-            >
-              get started
-            </Link>
-          </div>
-        </div>
-      </header>
+    <div className="relative min-h-screen overflow-hidden text-[#cfd4da]" style={{ background: INK, fontFamily: SANS }}>
+      {/* ░░░ THE SEAM — full-height glowing divider down the dead center ░░░ */}
+      <div className="pointer-events-none absolute inset-y-0 left-1/2 z-30 hidden -translate-x-1/2 md:block" aria-hidden>
+        <div className="h-full w-px" style={{ background: SEAM, boxShadow: `0 0 14px 1px ${SEAM}, 0 0 4px ${SEAM}` }} />
+      </div>
+      {/* tonal wash: warm on the left half, cool on the right half */}
+      <div className="pointer-events-none absolute inset-0 z-0 hidden md:block" aria-hidden>
+        <div className="absolute inset-y-0 left-0 w-1/2" style={{ background: "radial-gradient(120% 80% at 100% 30%, rgba(208,138,64,0.10), transparent 60%)" }} />
+        <div className="absolute inset-y-0 right-0 w-1/2" style={{ background: "radial-gradient(120% 80% at 0% 30%, rgba(64,200,208,0.12), transparent 60%)" }} />
+      </div>
 
-      {/* ──────────────────────────────────────────────────────────────
-          HERO
-      ────────────────────────────────────────────────────────────── */}
-      <section className="mx-auto flex w-full max-w-6xl flex-col items-center px-6 pt-28 pb-16 text-center">
-        <div className="flex items-center gap-2 mb-10">
-          <span
-            className="inline-block h-2 w-2 rounded-full animate-pulse"
-            style={{ backgroundColor: ACCENT, boxShadow: `0 0 10px ${ACCENT}` }}
-          />
-          <span
-            className="text-[10px] tracking-[0.3em] uppercase"
-            style={{ color: ACCENT, fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-          >
-            Antipode · Auckland · Frontier Layer
+      <div className="relative z-10">
+        {/* ═══ MASTHEAD — brand sits ON the seam ═══ */}
+        <header className="relative">
+          {/* sign-in on the physical side, get-started on the digital side */}
+          <div className="absolute left-0 top-5 hidden w-1/2 justify-start pl-6 md:flex">
+            <Link href="/login" className="text-[11px] tracking-[0.2em] uppercase transition-colors hover:text-[#f0c98a]" style={{ fontFamily: MONO, color: COPPER }}>
+              ← sign in
+            </Link>
+          </div>
+          <div className="absolute right-0 top-5 hidden w-1/2 justify-end pr-6 md:flex">
+            <Link href="/signup" className="border px-4 py-1.5 text-[11px] tracking-[0.2em] uppercase transition-colors hover:bg-[#40c8d0] hover:text-black" style={{ fontFamily: MONO, color: ACCENT, borderColor: `${ACCENT}66` }}>
+              get started →
+            </Link>
+          </div>
+
+          <div className="flex flex-col items-center pt-7 pb-3">
+            <div className="text-3xl font-semibold tracking-[0.32em]" style={{ color: "#f4f6f8" }}>
+              ANTI<span style={{ color: ACCENT }}>PODE</span>
+            </div>
+            <div className="mt-1 text-[10px] tracking-[0.34em] uppercase" style={{ fontFamily: MONO, color: "#5a626c" }}>
+              Auckland 36°S · the opposite plane
+            </div>
+            {/* mobile-only auth (seam collapses on small screens) */}
+            <div className="mt-3 flex items-center gap-4 md:hidden">
+              <Link href="/login" className="text-[11px] uppercase tracking-[0.2em]" style={{ fontFamily: MONO, color: COPPER }}>sign in</Link>
+              <Link href="/signup" className="border px-3 py-1 text-[11px] uppercase tracking-[0.2em]" style={{ fontFamily: MONO, color: ACCENT, borderColor: `${ACCENT}66` }}>get started</Link>
+            </div>
+          </div>
+        </header>
+
+        {/* ═══ HERO — the split. Physical board ↔ its glowing twin ═══ */}
+        <section className="grid grid-cols-1 md:grid-cols-2">
+          {/* LEFT — PHYSICAL */}
+          <div className="relative flex flex-col items-end px-6 pt-10 pb-6 md:pr-12">
+            <div className="mb-5 flex items-center gap-2 self-end">
+              <span className="text-[10px] uppercase tracking-[0.3em]" style={{ fontFamily: MONO, color: COPPER }}>physical · board #A7-04</span>
+              <span className="h-2 w-2 rounded-full" style={{ background: COPPER, boxShadow: `0 0 8px ${COPPER}` }} />
+            </div>
+            <PhysicalBoard />
+            <div className="mt-5 text-right text-[11px]" style={{ fontFamily: MONO, color: "#6a625a" }}>
+              copper · powered · iterating in <span style={{ color: COPPER }}>weeks</span>
+            </div>
+          </div>
+
+          {/* RIGHT — DIGITAL TWIN */}
+          <div className="relative flex flex-col items-start px-6 pt-10 pb-6 md:pl-12">
+            <div className="mb-5 flex items-center gap-2 self-start">
+              <span className="h-2 w-2 animate-pulse rounded-full" style={{ background: ACCENT, boxShadow: `0 0 8px ${ACCENT}` }} />
+              <span className="text-[10px] uppercase tracking-[0.3em]" style={{ fontFamily: MONO, color: ACCENT }}>digital twin · +200ms ahead</span>
+            </div>
+            <DigitalTwin />
+            <div className="mt-5 text-left text-[11px]" style={{ fontFamily: MONO, color: "#5b757a" }}>
+              wireframe · live · iterating in <span style={{ color: ACCENT }}>seconds</span>
+            </div>
+          </div>
+        </section>
+
+        {/* sync caption straddling the seam */}
+        <div className="flex justify-center pb-2">
+          <span className="text-[10px] uppercase tracking-[0.3em]" style={{ fontFamily: MONO, color: "#4a525c" }}>
+            <span style={{ color: COPPER }}>◀ pin</span> &nbsp;⇄&nbsp; <span style={{ color: ACCENT }}>twin reading ▶</span> &nbsp;·&nbsp; five components, one coordinate
           </span>
         </div>
 
-        <h1
-          className="text-5xl sm:text-6xl lg:text-7xl tracking-tight text-white leading-[1.05] max-w-4xl"
-          style={{ fontFamily: "'Cormorant Garamond', 'Iowan Old Style', Georgia, serif", fontWeight: 500 }}
-        >
-          Hot-reloading for physical engineering.
-        </h1>
-
-        <p className="mt-8 max-w-2xl text-base sm:text-lg text-[#d4d4d8] leading-snug">
-          Hardware iteration is weeks. Software is seconds. Antipode pairs your prototype with a
-          live digital twin, runs simulations ahead of real time, and warns you before the smoke comes out.
-        </p>
-        <p
-          className="mt-6 text-sm text-[#71717a]"
-          style={{ fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-        >
-          From Auckland — antipode of Europe, where atoms meet their digital twin.
-        </p>
-
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-          <Link
-            href="/signup"
-            className="inline-block border px-6 py-2.5 text-xs transition-all duration-200"
-            style={{
-              fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace",
-              borderColor: ACCENT,
-              color: ACCENT,
-              boxShadow: `0 0 20px ${ACCENT}30`,
-            }}
-          >
-            $ antipode pair →
-          </Link>
-          <Link
-            href="/login"
-            className="inline-block text-xs text-[#71717a] hover:text-[#fafafa] transition-colors px-4 py-2.5"
-            style={{ fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-          >
-            or sign in
-          </Link>
-        </div>
-
-        <div
-          className="mt-10 inline-block border-l-2 pl-4 py-1 text-left text-sm text-[#a1a1aa] max-w-md"
-          style={{ borderColor: `${ACCENT}80` }}
-        >
-          &ldquo;The next revision is faster than the next prototype.&rdquo;
-        </div>
-      </section>
-
-      {/* ──────────────────────────────────────────────────────────────
-          SPLIT — physical PCB ↔ digital twin
-      ────────────────────────────────────────────────────────────── */}
-      <section className="border-t border-[#16181d]">
-        <div className="mx-auto max-w-6xl px-6 py-20">
-          <div className="flex items-center justify-between mb-10">
-            <div className="flex items-center gap-2">
-              <span
-                className="inline-block h-1.5 w-1.5 rounded-full animate-pulse"
-                style={{ backgroundColor: ACCENT }}
-              />
-              <span
-                className="text-[10px] uppercase tracking-[0.25em] text-[#71717a]"
-                style={{ fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-              >
-                /pair — live mirror, board #A7-04
-              </span>
-            </div>
-            <span
-              className="text-[10px] uppercase tracking-[0.25em] text-[#52525b]"
-              style={{ fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-            >
-              sync 2.1ms · drift 0.4ms
-            </span>
+        {/* headline sits across / under the split — modest, not a giant serif hero */}
+        <section className="px-6 pb-14 pt-6">
+          <div className="mx-auto grid max-w-5xl grid-cols-1 items-center gap-2 md:grid-cols-2">
+            <h1 className="text-right text-2xl font-medium leading-tight tracking-tight md:text-[2rem]" style={{ color: "#eef1f4" }}>
+              Test the change in the twin
+            </h1>
+            <h1 className="text-left text-2xl font-medium leading-tight tracking-tight md:text-[2rem]" style={{ color: ACCENT }}>
+              before you touch the iron.
+            </h1>
           </div>
+          <p className="mx-auto mt-5 max-w-xl text-center text-sm leading-relaxed" style={{ color: "#8b929b" }}>
+            Hardware iteration is weeks. Software is seconds. Antipode mirrors your prototype into a live
+            digital twin, runs it ahead of real time, and tells you what breaks — before the smoke comes out.
+          </p>
+        </section>
 
-          <div className="grid gap-4 lg:grid-cols-[1fr_auto_1fr] items-stretch">
-            {/* Left: physical PCB */}
-            <div className="rounded-md border border-[#16181d] bg-[#0a0c11] p-5">
-              <div className="flex items-center justify-between mb-4">
-                <span
-                  className="text-[10px] uppercase tracking-[0.25em] text-[#71717a]"
-                  style={{ fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-                >
-                  Physical · PCB prototype
-                </span>
-                <span
-                  className="text-[10px]"
-                  style={{ color: "#7adfa0", fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-                >
-                  ◉ powered
-                </span>
-              </div>
-
-              <svg viewBox="0 0 320 200" className="w-full">
-                {/* PCB substrate */}
-                <rect x="10" y="10" width="300" height="180" rx="6" fill="#0e1a14" stroke="#1f4a2f" strokeWidth="1" />
-
-                {/* Mounting holes */}
-                {[
-                  [22, 22],
-                  [298, 22],
-                  [22, 178],
-                  [298, 178],
-                ].map(([cx, cy], i) => (
-                  <circle key={i} cx={cx} cy={cy} r="5" fill="#08090d" stroke="#1f4a2f" />
-                ))}
-
-                {/* Traces */}
-                {[40, 60, 80, 100, 120, 140].map((y) => (
-                  <line key={y} x1="50" y1={y} x2="270" y2={y} stroke="#3a8f5a" strokeWidth="0.6" opacity="0.55" />
-                ))}
-                {[80, 120, 160, 200, 240].map((x) => (
-                  <line key={x} x1={x} y1="30" x2={x} y2="170" stroke="#3a8f5a" strokeWidth="0.6" opacity="0.4" />
-                ))}
-
-                {/* MCU */}
-                <rect x="125" y="75" width="70" height="50" rx="2" fill="#16181d" stroke="#3a3a3a" />
-                <text x="160" y="105" textAnchor="middle" fontSize="9" fontFamily="ui-monospace, monospace" fill="#71717a">
-                  MCU
-                </text>
-
-                {/* VRMs */}
-                {[
-                  { x: 50, y: 50, label: "VRM-1", color: "#7adfa0" },
-                  { x: 50, y: 110, label: "VRM-2", color: "#7adfa0" },
-                  { x: 230, y: 80, label: "VRM-3", color: "#f0b070" },
-                ].map((c) => (
-                  <g key={c.label}>
-                    <rect
-                      x={c.x - 16}
-                      y={c.y - 12}
-                      width="32"
-                      height="24"
-                      rx="2"
-                      fill="#16181d"
-                      stroke={c.color}
-                      strokeWidth="0.8"
-                    />
-                    <circle cx={c.x} cy={c.y - 16} r="2.5" fill={c.color} opacity="0.85" />
-                    <text
-                      x={c.x}
-                      y={c.y + 24}
-                      textAnchor="middle"
-                      fontSize="7"
-                      fontFamily="ui-monospace, monospace"
-                      fill={c.color}
-                    >
-                      {c.label}
-                    </text>
-                  </g>
-                ))}
-
-                {/* Capacitors */}
-                {[80, 110, 210, 240].map((x) => (
-                  <circle key={x} cx={x} cy="155" r="5" fill="#3a3a3a" stroke="#5a5a5a" />
-                ))}
-
-                {/* Header pins */}
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <rect key={i} x={280} y={50 + i * 12} width="14" height="6" fill="#d4af37" />
-                ))}
-              </svg>
-            </div>
-
-            {/* Center: sync arrows */}
-            <div className="hidden lg:flex flex-col items-center justify-center gap-3 px-2">
-              {[0, 1, 2, 3, 4].map((i) => (
-                <div key={i} className="flex flex-col items-center gap-0.5">
-                  <span
-                    style={{ color: ACCENT, fontSize: "16px", lineHeight: 1 }}
-                  >
-                    ⇄
-                  </span>
-                  <span
-                    style={{
-                      color: "#52525b",
-                      fontSize: "8px",
-                      fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace",
-                    }}
-                  >
-                    SYNC
+        {/* ═══ FAILURE-PREDICTION band — full width, crosses the seam ═══ */}
+        <section className="border-y" style={{ borderColor: "#15181e", background: "#08090e" }}>
+          <div className="relative">
+            {/* the seam continues through this band */}
+            <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-px -translate-x-1/2 md:block" style={{ background: `${SEAM}55` }} aria-hidden />
+            <div className="mx-auto max-w-4xl px-6 py-12">
+              <div className="overflow-hidden rounded-md border" style={{ borderColor: `${ACCENT}33`, background: "#0a0c12", boxShadow: `0 0 40px ${ACCENT}12` }}>
+                <div className="flex items-center justify-between border-b px-5 py-3" style={{ borderColor: "#15181e", background: "#070810" }}>
+                  <span className="text-[11px]" style={{ fontFamily: MONO, color: "#6a727c" }}>twin://A7-04 — reading ahead of real time</span>
+                  <span className="flex items-center gap-2">
+                    <span className="h-2 w-2 animate-pulse rounded-full" style={{ background: ACCENT, boxShadow: `0 0 10px ${ACCENT}` }} />
+                    <span className="text-[10px]" style={{ fontFamily: MONO, color: ACCENT }}>14,200 samples/sec</span>
                   </span>
                 </div>
-              ))}
-            </div>
-
-            {/* Right: digital twin */}
-            <div
-              className="rounded-md border bg-[#0a0c11] p-5"
-              style={{ borderColor: `${ACCENT}40`, boxShadow: `0 0 24px ${ACCENT}15` }}
-            >
-              <div className="flex items-center justify-between mb-4">
-                <span
-                  className="text-[10px] uppercase tracking-[0.25em]"
-                  style={{ color: ACCENT, fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-                >
-                  Digital · twin telemetry
-                </span>
-                <span
-                  className="text-[10px]"
-                  style={{ color: ACCENT, fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-                >
-                  +200ms ahead
-                </span>
-              </div>
-
-              <div className="space-y-1.5">
-                {sensors.map((s) => (
+                <div className="space-y-1.5 px-6 py-5 text-[13px] leading-relaxed" style={{ fontFamily: MONO }}>
+                  <p style={{ color: "#6a727c" }}>twin running <span style={{ color: "#e8edf2" }}>200ms ahead</span> of real time · 14,200 samples/sec</p>
                   <div
-                    key={s.label}
-                    className="flex justify-between items-center py-1.5 px-2 rounded-sm"
-                    style={{
-                      backgroundColor: s.tone === "warn" ? "#f0b07015" : "#0e1118",
-                      border: `1px solid ${s.tone === "warn" ? "#f0b07040" : "#16181d"}`,
-                    }}
+                    className="mt-3 rounded-sm border-l-2 px-4 py-3"
+                    style={{ borderColor: ACCENT, background: `${ACCENT}10`, boxShadow: `0 0 18px ${ACCENT}25`, animation: "antipulse 1.6s ease-in-out infinite" }}
                   >
-                    <span
-                      className="text-[11px]"
-                      style={{
-                        color: "#71717a",
-                        fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace",
-                      }}
-                    >
-                      {s.label}
-                    </span>
-                    <span
-                      className="text-[11px]"
-                      style={{
-                        color: toneColor[s.tone],
-                        fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace",
-                      }}
-                    >
-                      {s.value}
-                    </span>
+                    <p style={{ color: ACCENT, fontWeight: 700 }}>⚠ PREDICTED FAILURE in 4.2s</p>
+                    <p className="mt-1 pl-4" style={{ color: "#cfd4da" }}>└ component: <span style={{ color: "#f0b070" }}>VRM-3</span> (voltage regulator)</p>
+                    <p className="pl-4" style={{ color: "#cfd4da" }}>└ cause: thermal runaway @ <span style={{ color: "#f08070" }}>87°C</span></p>
+                    <p className="pl-4" style={{ color: "#cfd4da" }}>└ action: reduce rail-2 load 15%</p>
                   </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ──────────────────────────────────────────────────────────────
-          FAILURE PREDICTION — terminal panel
-      ────────────────────────────────────────────────────────────── */}
-      <section className="border-t border-[#16181d]">
-        <div className="mx-auto max-w-6xl px-6 py-20">
-          <p
-            className="text-[10px] uppercase tracking-[0.3em] mb-3 text-center"
-            style={{ color: ACCENT, fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-          >
-            Failure prediction
-          </p>
-          <h2
-            className="text-3xl sm:text-4xl tracking-tight text-white text-center mb-10"
-            style={{ fontFamily: "'Cormorant Garamond', 'Iowan Old Style', Georgia, serif", fontWeight: 500 }}
-          >
-            The twin sees failure before the board feels it.
-          </h2>
-
-          <div
-            className="rounded-md overflow-hidden border border-[#16181d] bg-[#0a0c11]"
-          >
-            {/* Terminal header */}
-            <div
-              className="flex items-center justify-between px-5 py-3 border-b border-[#16181d] bg-[#06070a]"
-            >
-              <span
-                className="text-[11px]"
-                style={{ color: "#71717a", fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-              >
-                $ antipode predict --board A7-04
-              </span>
-              <span className="flex items-center gap-2">
-                <span
-                  className="inline-block h-1.5 w-1.5 rounded-full animate-pulse"
-                  style={{ backgroundColor: ACCENT }}
-                />
-                <span
-                  className="text-[10px]"
-                  style={{ color: ACCENT, fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-                >
-                  twin running 200ms ahead
-                </span>
-              </span>
-            </div>
-
-            {/* Terminal body */}
-            <div
-              className="p-6 text-sm leading-relaxed space-y-1.5"
-              style={{ fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-            >
-              <p>
-                <span style={{ color: "#71717a" }}>sensor data ingested:</span>{" "}
-                <span style={{ color: "#fafafa" }}>14,200 samples/sec</span>
-              </p>
-              <p>
-                <span style={{ color: "#71717a" }}>twin simulation:</span>{" "}
-                <span style={{ color: "#fafafa" }}>running 200ms ahead of real time</span>
-              </p>
-
-              <div className="pt-3 mt-3 border-t border-[#16181d]">
-                <p style={{ color: "#ef6b85" }}>
-                  <span className="font-bold">⚠ PREDICTED FAILURE in 4.2 sec</span>
-                </p>
-                <div className="mt-2 pl-5 space-y-1" style={{ color: "#fafafa" }}>
-                  <p>
-                    └ component: <span style={{ color: "#f0b070" }}>VRM-3</span> (voltage regulator)
-                  </p>
-                  <p>
-                    └ cause: thermal runaway at <span style={{ color: "#ef6b85" }}>87°C</span>
-                  </p>
-                  <p>└ recommendation: reduce load on rail-2 by 15%</p>
+                  <p className="pt-3" style={{ color: "#7adfa0" }}>✔ load reduced · thermal stabilized · iteration saved</p>
+                  <p style={{ color: "#5a626c" }}># the fix landed in the twin. the iron never knew.</p>
                 </div>
               </div>
+              <p className="mt-4 text-center text-[11px] uppercase tracking-[0.28em]" style={{ fontFamily: MONO, color: "#4a525c" }}>
+                the failure was averted <span style={{ color: ACCENT }}>before atoms</span> — at code-speed, not prototype-speed
+              </p>
+            </div>
+          </div>
+        </section>
 
-              <div className="pt-3 mt-3 border-t border-[#16181d]">
-                <p style={{ color: "#7adfa0" }}>action taken: reduced load. Thermal stabilized.</p>
-                <p style={{ color: "#71717a" }}>hardware iteration saved.</p>
+        {/* ═══ TWO WORLDS, ONE COORDINATE — globe + antipodal line ═══ */}
+        <section className="px-6 py-14">
+          <div className="mx-auto flex max-w-3xl flex-col items-center gap-6 md:flex-row md:justify-center md:gap-10">
+            <AntipodeGlobe />
+            <p className="max-w-md text-center text-[13px] leading-relaxed md:text-left" style={{ color: "#9aa1aa" }}>
+              An <span style={{ color: "#eef1f4" }}>antipode</span> is the opposite point on the globe — Auckland sits
+              almost exactly opposite Europe. The twin is the antipode of the hardware:
+              <span style={{ color: ACCENT }}> same coordinates, opposite plane.</span>
+            </p>
+          </div>
+        </section>
+
+        {/* ═══ MIRRORED STATS — one figure each side of the seam ═══ */}
+        <section className="border-t" style={{ borderColor: "#15181e" }}>
+          <div className="relative">
+            <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-px -translate-x-1/2 md:block" style={{ background: `${SEAM}55` }} aria-hidden />
+            <div className="grid grid-cols-1 md:grid-cols-2">
+              <div className="flex flex-col items-end px-6 py-12 md:pr-12">
+                <div className="text-5xl font-semibold tracking-tight md:text-6xl" style={{ color: COPPER }}>200ms</div>
+                <div className="mt-2 text-right text-[10px] uppercase tracking-[0.26em]" style={{ fontFamily: MONO, color: "#6a625a" }}>predictive accuracy · physical lead time</div>
+              </div>
+              <div className="flex flex-col items-start px-6 py-12 md:pl-12">
+                <div className="text-5xl font-semibold tracking-tight md:text-6xl" style={{ color: ACCENT }}>89%</div>
+                <div className="mt-2 text-left text-[10px] uppercase tracking-[0.26em]" style={{ fontFamily: MONO, color: "#5b757a" }}>of failures pre-empted · in the twin</div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ──────────────────────────────────────────────────────────────
-          FEATURES — 4 cards
-      ────────────────────────────────────────────────────────────── */}
-      <section className="border-t border-[#16181d]">
-        <div className="mx-auto max-w-6xl px-6 py-20">
-          <p
-            className="text-[10px] uppercase tracking-[0.3em] text-[#71717a] mb-10 text-center"
-            style={{ fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-          >
-            Four primitives
-          </p>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {[
-              {
-                cmd: "antipode.twin()",
-                label: "Real-time digital twin",
-                desc: "Mirror your board in software the moment it powers on. Every node, every rail.",
-              },
-              {
-                cmd: "antipode.predict()",
-                label: "Failure prediction",
-                desc: "Simulate 200ms ahead of real time. See the thermal runaway before the smoke.",
-              },
-              {
-                cmd: "antipode.ingest()",
-                label: "Sensor integration",
-                desc: "14,200 samples/sec ingested from voltage, current, thermal, and I2C buses.",
-              },
-              {
-                cmd: "antipode.test()",
-                label: "Pre-commit testing",
-                desc: "Validate firmware against the twin before flashing atoms. Iterate at code-speed.",
-              },
-            ].map((f) => (
-              <div
-                key={f.cmd}
-                className="border border-[#16181d] bg-[#0a0c11] p-5 hover:border-[#40c8d0]/40 transition-colors group"
-              >
-                <div className="flex items-center gap-2 mb-3">
-                  <span
-                    className="text-[#52525b]"
-                    style={{ fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-                  >
-                    &gt;
-                  </span>
-                  <span
-                    className="text-sm group-hover:text-white transition-colors"
-                    style={{ color: ACCENT, fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-                  >
-                    {f.cmd}
-                  </span>
-                </div>
-                <div className="text-white text-sm font-medium mb-2">{f.label}</div>
-                <div className="text-xs text-[#71717a] leading-relaxed">{f.desc}</div>
+        {/* ═══ CLOSE — paired CTAs, one per plane, across the seam ═══ */}
+        <section className="border-t" style={{ borderColor: "#15181e", background: "#08090e" }}>
+          <div className="relative">
+            <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-px -translate-x-1/2 md:block" style={{ background: SEAM, boxShadow: `0 0 12px ${SEAM}` }} aria-hidden />
+            <div className="grid grid-cols-1 md:grid-cols-2">
+              <div className="flex flex-col items-end gap-3 px-6 py-14 md:pr-12">
+                <p className="text-right text-sm" style={{ color: "#8b929b" }}>already pairing boards?</p>
+                <Link href="/login" className="border px-6 py-2.5 text-[12px] uppercase tracking-[0.2em] transition-colors hover:bg-[#d08a40] hover:text-black" style={{ fontFamily: MONO, color: COPPER, borderColor: `${COPPER}66` }}>
+                  ← sign in
+                </Link>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ──────────────────────────────────────────────────────────────
-          STATS
-      ────────────────────────────────────────────────────────────── */}
-      <section className="border-t border-[#16181d]" style={{ background: "#06070a" }}>
-        <div className="mx-auto max-w-5xl px-6 py-20">
-          <div className="grid gap-12 md:grid-cols-2 text-center md:text-left">
-            <div>
-              <div
-                className="text-5xl sm:text-6xl text-white tracking-tight"
-                style={{ fontFamily: "'Cormorant Garamond', 'Iowan Old Style', Georgia, serif", fontWeight: 500 }}
-              >
-                <span style={{ color: ACCENT }}>200ms</span>
-              </div>
-              <div
-                className="mt-3 text-xs uppercase tracking-[0.25em] text-[#71717a]"
-                style={{ fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-              >
-                predictions verified to this accuracy
-              </div>
-            </div>
-            <div>
-              <div
-                className="text-5xl sm:text-6xl text-white tracking-tight"
-                style={{ fontFamily: "'Cormorant Garamond', 'Iowan Old Style', Georgia, serif", fontWeight: 500 }}
-              >
-                89<span style={{ color: ACCENT }}>%</span>
-              </div>
-              <div
-                className="mt-3 text-xs uppercase tracking-[0.25em] text-[#71717a]"
-                style={{ fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-              >
-                of failures pre-empted
+              <div className="flex flex-col items-start gap-3 px-6 py-14 md:pl-12">
+                <p className="text-left text-sm" style={{ color: "#8b929b" }}>mirror your first board.</p>
+                <Link href="/signup" className="border px-6 py-2.5 text-[12px] uppercase tracking-[0.2em] transition-colors hover:bg-[#40c8d0] hover:text-black" style={{ fontFamily: MONO, color: ACCENT, borderColor: `${ACCENT}66`, boxShadow: `0 0 18px ${ACCENT}25` }}>
+                  pair the twin →
+                </Link>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ──────────────────────────────────────────────────────────────
-          CTA
-      ────────────────────────────────────────────────────────────── */}
-      <section className="border-t border-[#16181d]">
-        <div className="mx-auto max-w-6xl px-6 py-24 text-center">
-          <p
-            className="text-[10px] uppercase tracking-[0.3em] text-[#71717a] mb-6"
-            style={{ fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-          >
-            Pair a board. Mirror the rails. Run the twin ahead.
-          </p>
-          <Link
-            href="/signup"
-            className="inline-block border px-8 py-3 text-sm transition-all duration-200 hover:bg-opacity-10"
-            style={{
-              fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace",
-              borderColor: ACCENT,
-              color: ACCENT,
-              boxShadow: `0 0 20px ${ACCENT}30`,
-            }}
-          >
-            $ antipode init →
-          </Link>
-        </div>
-      </section>
-
-      {/* ──────────────────────────────────────────────────────────────
-          FOOTER
-      ────────────────────────────────────────────────────────────── */}
-      <footer className="border-t border-[#16181d]">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-8 sm:flex-row sm:items-center sm:justify-between">
-          <div
-            className="text-xs text-[#52525b]"
-            style={{ fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace" }}
-          >
-            <span
-              className="text-[#a1a1aa]"
-              style={{ fontFamily: "'Cormorant Garamond', 'Iowan Old Style', Georgia, serif", fontWeight: 600, fontSize: "0.9rem" }}
-            >
-              {appConfig.name}
-            </span>
-            <span className="mx-2">·</span>
-            <span>Auckland</span>
-            <span className="mx-2">·</span>
-            <span>antipode.co.nz</span>
+        {/* ═══ FOOTER — split across the seam ═══ */}
+        <footer className="border-t" style={{ borderColor: "#15181e" }}>
+          <div className="relative">
+            <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-px -translate-x-1/2 md:block" style={{ background: `${SEAM}44` }} aria-hidden />
+            <div className="mx-auto grid max-w-5xl grid-cols-1 gap-4 px-6 py-8 md:grid-cols-2">
+              <div className="text-[11px] md:text-right" style={{ fontFamily: MONO, color: "#5a626c" }}>
+                <span style={{ color: COPPER }}>{appConfig.name}</span> · Auckland 36°S
+              </div>
+              <a
+                href="https://abduljaleel.xyz/aletheia/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] uppercase tracking-[0.22em] transition-colors hover:text-[#40c8d0] md:text-left"
+                style={{ fontFamily: MONO, color: "#5a626c" }}
+              >
+                Part of the Aletheia stack ↗
+              </a>
+            </div>
           </div>
-          <a
-            href="https://abduljaleel.xyz/aletheia/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.25em] px-3 py-1.5 border transition-colors hover:bg-opacity-10"
-            style={{
-              fontFamily: "'JetBrains Mono', 'SF Mono', Menlo, monospace",
-              borderColor: `${ACCENT}40`,
-              color: ACCENT,
-            }}
-          >
-            Part of the Aletheia stack ↗
-          </a>
-        </div>
-      </footer>
+        </footer>
+      </div>
+
+      {/* keyframes for the predicted-failure pulse */}
+      <style>{`
+        @keyframes antipulse {
+          0%, 100% { box-shadow: 0 0 14px ${ACCENT}20; border-left-color: ${ACCENT}; }
+          50%      { box-shadow: 0 0 30px ${ACCENT}55; border-left-color: #9bf0f5; }
+        }
+      `}</style>
     </div>
   );
 }
