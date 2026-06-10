@@ -1,21 +1,67 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
-  vehicles,
-  missions,
-  behaviorEvents,
   getStatusBadgeVariant,
+  type Vehicle,
+  type Mission,
+  type BehaviorEvent,
 } from "@/lib/data/fleet";
+import {
+  listVehicles,
+  listMissions,
+  listBehaviorEvents,
+  listInterventions,
+  type InterventionItem,
+} from "@/lib/data/api";
 
 export default function AnalyticsPage() {
-  // Intervention rate per vehicle
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [missions, setMissions] = useState<Mission[]>([]);
+  const [behaviorEvents, setBehaviorEvents] = useState<BehaviorEvent[]>([]);
+  const [interventions, setInterventions] = useState<InterventionItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [v, m, e, i] = await Promise.all([
+          listVehicles(),
+          listMissions(),
+          listBehaviorEvents(200),
+          listInterventions(200),
+        ]);
+        setVehicles(v);
+        setMissions(m);
+        setBehaviorEvents(e);
+        setInterventions(i);
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Failed to load analytics"
+        );
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  // Intervention rate per vehicle (interventions table + mission counts)
   const vehicleInterventionRates = vehicles.map((v) => {
     const vehicleMissions = missions.filter((m) => m.vehicleId === v.id);
-    const totalInterventions = vehicleMissions.reduce(
+    const recordedInterventions = interventions.filter(
+      (i) => i.vehicleId === v.id
+    ).length;
+    const countedOnMissions = vehicleMissions.reduce(
       (sum, m) => sum + m.interventions,
       0
+    );
+    const totalInterventions = Math.max(
+      recordedInterventions,
+      countedOnMissions
     );
     const rate =
       vehicleMissions.length > 0
@@ -46,6 +92,24 @@ export default function AnalyticsPage() {
     critical: behaviorEvents.filter((e) => e.severity === "critical").length,
   };
 
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
+          <p className="text-muted-foreground">
+            Fleet performance insights and behavioral analysis
+          </p>
+        </div>
+        <Skeleton className="h-64 w-full" />
+        <div className="grid gap-6 md:grid-cols-2">
+          <Skeleton className="h-72 w-full" />
+          <Skeleton className="h-72 w-full" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -55,152 +119,171 @@ export default function AnalyticsPage() {
         </p>
       </div>
 
-      {/* Intervention Rate Chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Intervention Rate by Vehicle</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {vehicleInterventionRates.map((v) => (
-              <div key={v.id} className="flex items-center gap-3">
-                <span className="text-sm font-medium w-40 truncate">
-                  {v.name}
-                </span>
-                <div className="flex-1 h-6 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${
-                      v.interventionRate > 50
-                        ? "bg-red-500"
-                        : v.interventionRate > 25
-                        ? "bg-amber-500"
-                        : "bg-emerald-500"
-                    }`}
-                    style={{
-                      width: `${(v.interventionRate / maxRate) * 100}%`,
-                      minWidth: v.interventionRate > 0 ? "8px" : "0",
-                    }}
-                  />
-                </div>
-                <span className="text-sm font-mono w-12 text-right">
-                  {v.interventionRate}%
-                </span>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      {error && (
+        <p className="text-sm text-red-600" role="alert">
+          {error}
+        </p>
+      )}
 
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Performance Distribution */}
+      {!error && vehicles.length === 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle>Mission Score Distribution</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-end gap-4 h-48">
-              {scoreRanges.map((range) => (
-                <div
-                  key={range.label}
-                  className="flex-1 flex flex-col items-center gap-1"
-                >
-                  <span className="text-xs font-medium">{range.count}</span>
-                  <div
-                    className="w-full bg-primary rounded-t"
-                    style={{
-                      height: `${(range.count / maxScoreCount) * 100}%`,
-                      minHeight: range.count > 0 ? "4px" : "0",
-                    }}
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    {range.label}
-                  </span>
-                </div>
-              ))}
-            </div>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            No fleet data yet. Load demo data from the dashboard to see
+            analytics.
           </CardContent>
         </Card>
+      )}
 
-        {/* Event Severity Breakdown */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Behavior Events by Severity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <SeverityRow
-                label="Info"
-                count={severityCounts.info}
-                total={behaviorEvents.length}
-                color="bg-blue-500"
-              />
-              <SeverityRow
-                label="Warning"
-                count={severityCounts.warning}
-                total={behaviorEvents.length}
-                color="bg-amber-500"
-              />
-              <SeverityRow
-                label="Critical"
-                count={severityCounts.critical}
-                total={behaviorEvents.length}
-                color="bg-red-500"
-              />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Vehicle Comparison Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Vehicle Comparison</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3">
-            {vehicleInterventionRates
-              .sort((a, b) => b.fleetScore - a.fleetScore)
-              .map((v, i) => (
-                <div
-                  key={v.id}
-                  className="flex items-center justify-between rounded-md border p-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-mono text-muted-foreground w-6">
-                      #{i + 1}
+      {vehicles.length > 0 && (
+        <>
+          {/* Intervention Rate Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Intervention Rate by Vehicle</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {vehicleInterventionRates.map((v) => (
+                  <div key={v.id} className="flex items-center gap-3">
+                    <span className="text-sm font-medium w-40 truncate">
+                      {v.name}
                     </span>
-                    <div>
-                      <p className="font-medium text-sm">{v.name}</p>
-                      <p className="text-xs text-muted-foreground capitalize">
-                        {v.type} &middot; {v.autonomyLevel}
-                      </p>
+                    <div className="flex-1 h-6 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${
+                          v.interventionRate > 50
+                            ? "bg-red-500"
+                            : v.interventionRate > 25
+                            ? "bg-amber-500"
+                            : "bg-emerald-500"
+                        }`}
+                        style={{
+                          width: `${(v.interventionRate / maxRate) * 100}%`,
+                          minWidth: v.interventionRate > 0 ? "8px" : "0",
+                        }}
+                      />
                     </div>
+                    <span className="text-sm font-mono w-12 text-right">
+                      {v.interventionRate}%
+                    </span>
                   </div>
-                  <div className="flex items-center gap-4 text-sm">
-                    <div className="text-right">
-                      <p className="text-muted-foreground text-xs">Score</p>
-                      <p className="font-bold">{v.fleetScore}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-muted-foreground text-xs">Missions</p>
-                      <p className="font-mono">{v.missionCount}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-muted-foreground text-xs">Int. Rate</p>
-                      <p className="font-mono">{v.interventionRate}%</p>
-                    </div>
-                    <Badge
-                      variant={getStatusBadgeVariant(v.status)}
-                      className="capitalize text-xs"
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* Performance Distribution */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Mission Score Distribution</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-end gap-4 h-48">
+                  {scoreRanges.map((range) => (
+                    <div
+                      key={range.label}
+                      className="flex-1 flex flex-col items-center gap-1"
                     >
-                      {v.status}
-                    </Badge>
-                  </div>
+                      <span className="text-xs font-medium">{range.count}</span>
+                      <div
+                        className="w-full bg-primary rounded-t"
+                        style={{
+                          height: `${(range.count / maxScoreCount) * 100}%`,
+                          minHeight: range.count > 0 ? "4px" : "0",
+                        }}
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        {range.label}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </CardContent>
+            </Card>
+
+            {/* Event Severity Breakdown */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Behavior Events by Severity</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <SeverityRow
+                    label="Info"
+                    count={severityCounts.info}
+                    total={behaviorEvents.length}
+                    color="bg-blue-500"
+                  />
+                  <SeverityRow
+                    label="Warning"
+                    count={severityCounts.warning}
+                    total={behaviorEvents.length}
+                    color="bg-amber-500"
+                  />
+                  <SeverityRow
+                    label="Critical"
+                    count={severityCounts.critical}
+                    total={behaviorEvents.length}
+                    color="bg-red-500"
+                  />
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
+
+          {/* Vehicle Comparison Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Vehicle Comparison</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3">
+                {vehicleInterventionRates
+                  .sort((a, b) => b.fleetScore - a.fleetScore)
+                  .map((v, i) => (
+                    <div
+                      key={v.id}
+                      className="flex items-center justify-between rounded-md border p-3"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-mono text-muted-foreground w-6">
+                          #{i + 1}
+                        </span>
+                        <div>
+                          <p className="font-medium text-sm">{v.name}</p>
+                          <p className="text-xs text-muted-foreground capitalize">
+                            {v.type} &middot; {v.autonomyLevel}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 text-sm">
+                        <div className="text-right">
+                          <p className="text-muted-foreground text-xs">Score</p>
+                          <p className="font-bold">{v.fleetScore}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-muted-foreground text-xs">Missions</p>
+                          <p className="font-mono">{v.missionCount}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-muted-foreground text-xs">Int. Rate</p>
+                          <p className="font-mono">{v.interventionRate}%</p>
+                        </div>
+                        <Badge
+                          variant={getStatusBadgeVariant(v.status)}
+                          className="capitalize text-xs"
+                        >
+                          {v.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }

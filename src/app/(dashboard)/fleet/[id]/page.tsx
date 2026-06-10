@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -14,22 +15,96 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  getVehicleById,
-  getMissionsForVehicle,
-  getEventsForVehicle,
-  getVehicleTelemetry,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   getStatusBadgeVariant,
   getSeverityBadgeVariant,
   formatDate,
+  type Vehicle,
+  type VehicleStatus,
+  type Mission,
+  type BehaviorEvent,
 } from "@/lib/data/fleet";
+import {
+  getVehicle,
+  listMissionsForVehicle,
+  listEventsForVehicle,
+  listInterventionsForVehicle,
+  updateVehicleStatus,
+  deriveTelemetry,
+  type InterventionItem,
+} from "@/lib/data/api";
 
 export default function VehicleDetailPage() {
   const params = useParams();
   const vehicleId = params.id as string;
-  const vehicle = getVehicleById(vehicleId);
-  const missions = getMissionsForVehicle(vehicleId);
-  const events = getEventsForVehicle(vehicleId);
-  const telemetry = getVehicleTelemetry(vehicleId);
+
+  const [vehicle, setVehicle] = useState<Vehicle | null>(null);
+  const [missions, setMissions] = useState<Mission[]>([]);
+  const [events, setEvents] = useState<BehaviorEvent[]>([]);
+  const [interventions, setInterventions] = useState<InterventionItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [savingStatus, setSavingStatus] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const v = await getVehicle(vehicleId);
+        setVehicle(v);
+        if (v) {
+          const [m, e, i] = await Promise.all([
+            listMissionsForVehicle(vehicleId),
+            listEventsForVehicle(vehicleId),
+            listInterventionsForVehicle(vehicleId),
+          ]);
+          setMissions(m);
+          setEvents(e);
+          setInterventions(i);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load vehicle");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [vehicleId]);
+
+  async function handleStatusChange(status: VehicleStatus) {
+    if (!vehicle || status === vehicle.status) return;
+    const previous = vehicle;
+    setSavingStatus(true);
+    setVehicle({ ...vehicle, status });
+    try {
+      await updateVehicleStatus(vehicle.id, status);
+    } catch (err) {
+      setVehicle(previous);
+      setError(
+        err instanceof Error ? err.message : "Failed to update vehicle status"
+      );
+    } finally {
+      setSavingStatus(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-64" />
+        <div className="grid gap-4 md:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full" />
+          ))}
+        </div>
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
 
   if (!vehicle) {
     return (
@@ -38,9 +113,16 @@ export default function VehicleDetailPage() {
         <p className="text-muted-foreground">
           No vehicle with ID &quot;{vehicleId}&quot; exists.
         </p>
+        {error && (
+          <p className="text-sm text-red-600" role="alert">
+            {error}
+          </p>
+        )}
       </div>
     );
   }
+
+  const telemetry = deriveTelemetry(vehicle);
 
   return (
     <div className="space-y-6">
@@ -49,13 +131,36 @@ export default function VehicleDetailPage() {
           <h1 className="text-3xl font-bold tracking-tight">{vehicle.name}</h1>
           <p className="text-muted-foreground">{vehicle.location}</p>
         </div>
-        <Badge
-          variant={getStatusBadgeVariant(vehicle.status)}
-          className="capitalize text-sm px-3 py-1"
-        >
-          {vehicle.status}
-        </Badge>
+        <div className="flex items-center gap-3">
+          <Badge
+            variant={getStatusBadgeVariant(vehicle.status)}
+            className="capitalize text-sm px-3 py-1"
+          >
+            {vehicle.status}
+          </Badge>
+          <Select
+            value={vehicle.status}
+            onValueChange={(v) => handleStatusChange((v ?? "idle") as VehicleStatus)}
+            disabled={savingStatus}
+          >
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="Set status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="idle">Idle</SelectItem>
+              <SelectItem value="maintenance">Maintenance</SelectItem>
+              <SelectItem value="offline">Offline</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
+
+      {error && (
+        <p className="text-sm text-red-600" role="alert">
+          {error}
+        </p>
+      )}
 
       {/* Overview cards */}
       <div className="grid gap-4 md:grid-cols-4">
@@ -97,6 +202,9 @@ export default function VehicleDetailPage() {
         <TabsList>
           <TabsTrigger value="status">Status</TabsTrigger>
           <TabsTrigger value="missions">Missions ({missions.length})</TabsTrigger>
+          <TabsTrigger value="interventions">
+            Interventions ({interventions.length})
+          </TabsTrigger>
           <TabsTrigger value="events">Behavior Events ({events.length})</TabsTrigger>
         </TabsList>
 
@@ -186,6 +294,56 @@ export default function VehicleDetailPage() {
                     <TableRow>
                       <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                         No missions recorded
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="interventions" className="mt-4">
+          <Card>
+            <CardContent className="pt-4">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead>Started</TableHead>
+                    <TableHead>Resolved</TableHead>
+                    <TableHead>Outcome</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {interventions.map((intervention) => (
+                    <TableRow key={intervention.id}>
+                      <TableCell className="font-medium capitalize">
+                        {intervention.type.replace(/_/g, " ")}
+                      </TableCell>
+                      <TableCell className="max-w-xs truncate text-sm">
+                        {intervention.reason}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                        {formatDate(intervention.startedAt)}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                        {intervention.resolvedAt
+                          ? formatDate(intervention.resolvedAt)
+                          : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="capitalize text-xs">
+                          {(intervention.outcome ?? "pending").replace(/_/g, " ")}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {interventions.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                        No interventions recorded
                       </TableCell>
                     </TableRow>
                   )}
