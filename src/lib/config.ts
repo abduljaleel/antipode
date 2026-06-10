@@ -4,9 +4,9 @@ export const appConfig = {
   url: "https://antipode.co.nz",
   navItems: [
     { title: "Dashboard", href: "/dashboard", icon: "dashboard" },
-    { title: "Twins", href: "/twins", icon: "car" },
-    { title: "Sensors", href: "/sensors", icon: "radio" },
-    { title: "Predictions", href: "/predictions", icon: "play" },
+    { title: "Fleet", href: "/fleet", icon: "car" },
+    { title: "Missions", href: "/missions", icon: "play" },
+    { title: "Console", href: "/console", icon: "radio" },
     { title: "Analytics", href: "/analytics", icon: "chart" },
   ],
 };
